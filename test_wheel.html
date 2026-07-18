@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Wheel of Fortune - Unit Tests</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #110e28;
+      color: #f3f0ff;
+      padding: 40px;
+    }
+    h1 { color: #b185ff; }
+    .pass { color: #00f2fe; }
+    .fail { color: #ff4a83; font-weight: bold; }
+    .test-case {
+      margin-bottom: 12px;
+      padding: 10px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Wheel of Fortune Self-Tests</h1>
+  <div id="results">Running tests...</div>
+
+  <script>
+    // Mock elements to run the test environment safely without crashing on DOM references
+    const mockElements = {
+      'names-input': { value: '' },
+      'btn-shuffle': { addEventListener: () => {} },
+      'btn-clear': { addEventListener: () => {} },
+      'btn-sample': { addEventListener: () => {} },
+      'spin-button': { addEventListener: () => {} },
+      'wheel-canvas': { getContext: () => ({
+        clearRect: () => {},
+        beginPath: () => {},
+        arc: () => {},
+        fill: () => {},
+        stroke: () => {},
+        save: () => {},
+        translate: () => {},
+        rotate: () => {},
+        restore: () => {},
+        fillText: () => {},
+        measureText: () => ({ width: 10 })
+      }), width: 600, height: 600 },
+      'winner-modal': { classList: { add: () => {}, remove: () => {} } },
+      'winner-name': {},
+      'btn-remove-winner': { addEventListener: () => {} },
+      'btn-keep-winner': { addEventListener: () => {} },
+      'confetti-container': {},
+      'btn-sidebar-toggle': { addEventListener: () => {}, textContent: '◀' },
+      'sidebar-panel': { classList: { toggle: () => {} } },
+      'turbo-toggle': { checked: false, addEventListener: () => {} },
+      'turbo-stepper-container': { classList: { remove: () => {}, add: () => {} } },
+      'btn-stepper-minus': { addEventListener: () => {} },
+      'btn-stepper-plus': { addEventListener: () => {} },
+      'stepper-value': { textContent: '' }
+    };
+
+    // Override document.getElementById
+    const originalGetElement = document.getElementById;
+    document.getElementById = function(id) {
+      if (mockElements[id]) return mockElements[id];
+      return originalGetElement.call(document, id);
+    };
+
+    // Override document.querySelector
+    document.querySelector = function(selector) {
+      if (selector === '.app-container') {
+        return { classList: { toggle: () => {} } };
+      }
+      return null;
+    };
+
+    // Output logs
+    const resultsContainer = document.getElementById('results');
+    resultsContainer.innerHTML = '';
+
+    function logTest(name, passed, details = '') {
+      const div = document.createElement('div');
+      div.className = 'test-case';
+      div.innerHTML = `<strong>${name}</strong>: <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span> ${details}`;
+      resultsContainer.appendChild(div);
+    }
+  </script>
+
+  <!-- Load the script to test -->
+  <script src="script.js"></script>
+
+  <script>
+    // Test suite execution
+    try {
+      // 1. Test cleanName returns name as-is
+      const test1 = cleanName("Apple") === "Apple";
+      logTest("cleanName returns name as-is", test1, `Apple -> ${cleanName("Apple")}`);
+
+      // 2. Test getNamesList
+      namesInput.value = "Apple\nBanana\nCherry\nDate";
+      const list = getNamesList();
+      const test2 = list.length === 4 && list[2] === "Cherry";
+      logTest("getNamesList parses lines correctly", test2, `Parsed list length: ${list.length}, item[2]: ${list[2]}`);
+
+    } catch (e) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fail';
+      errorDiv.innerText = `Runtime Error: ${e.message}\n${e.stack}`;
+      resultsContainer.appendChild(errorDiv);
+    }
+  </script>
+</body>
+</html>

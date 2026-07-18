@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lucky Wheel of Fortune</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar / Inputs Panel -->
+    <aside class="sidebar glass" id="sidebar-panel">
+      <!-- Floating collapse/expand arrow pinned to right edge of sidebar -->
+      <button id="btn-sidebar-toggle" class="sidebar-toggle" title="Toggle Sidebar">◀</button>
+
+      <header class="app-header">
+        <h1>Wheel of Fortune</h1>
+      </header>
+
+      <section class="panel-section">
+        <label for="names-input" class="section-title">Names List (one per line)</label>
+        <textarea id="names-input" placeholder="Enter names here...&#10;e.g.,&#10;Alice&#10;Bob&#10;Charlie"></textarea>
+      </section>
+
+      <section class="panel-section row">
+        <button id="btn-shuffle" class="btn btn-secondary" title="Shuffle names">Shuffle</button>
+        <button id="btn-clear" class="btn btn-secondary" title="Clear all names">Clear</button>
+        <button id="btn-sample" class="btn btn-secondary" title="Load sample names">Reset</button>
+      </section>
+
+      <!-- Turbo Play Section -->
+      <section class="panel-section turbo-section">
+        <div class="setting-row">
+          <label for="turbo-toggle" style="font-weight: 600;">Turbo Play</label>
+          <label class="ios-switch">
+            <input type="checkbox" id="turbo-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div id="turbo-stepper-container" class="turbo-stepper-container hidden">
+          <span class="stepper-label">Winners to Pick:</span>
+          <div class="stepper">
+            <button id="btn-stepper-minus" class="btn-stepper" type="button">−</button>
+            <span id="stepper-value" class="stepper-value">3</span>
+            <button id="btn-stepper-plus" class="btn-stepper" type="button">+</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Main Wheel Area -->
+    <main class="main-content">
+      <div class="wheel-outer-container">
+        <!-- Pointer Arrow at the top -->
+        <div class="pointer-arrow">
+          <svg viewBox="0 0 24 24" width="40" height="40">
+            <polygon points="12,20 2,4 22,4" fill="var(--ios-blue)" />
+          </svg>
+        </div>
+
+        <div class="wheel-wrapper">
+          <canvas id="wheel-canvas" width="800" height="800"></canvas>
+          <button id="spin-button" class="spin-hub">
+            <span>SPIN</span>
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Winner Modal Dialog -->
+  <div id="winner-modal" class="modal-overlay hidden">
+    <div class="modal-content glass">
+      <div class="confetti-container" id="confetti-container"></div>
+      <div class="modal-header">
+        <span class="sparkle">✨</span> WINNER <span class="sparkle">✨</span>
+      </div>
+      <div id="winner-name" class="modal-winner-name">John Doe</div>
+      <div class="modal-actions">
+        <button id="btn-remove-winner" class="btn btn-primary btn-remove">Remove & Spin Again</button>
+        <button id="btn-keep-winner" class="btn btn-outline btn-keep">Keep Name & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
