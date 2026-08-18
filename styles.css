@@ -1,248 +1,548 @@
-/* Premium Deep Dark HSL & Mesh Theme */
+/* ============================================================
+   Shared macOS app shell.
+
+   This block is identical across the Micro Apps set (QR Generator,
+   Event Formatter, Wheel of Fortune). Change it in one app and copy
+   it to the others rather than editing a single app in isolation.
+   ============================================================ */
 :root {
-  --bg-primary: #09070f;              /* Deep Space Dark base */
-  --bg-secondary: rgba(28, 28, 30, 0.65); /* iOS Frosted translucent */
-  --bg-tertiary: rgba(44, 44, 46, 0.6);
-  --text-primary: #ffffff;
-  --text-secondary: #a19ebb;          /* Soft violet tinted label */
-  --ios-blue: #0a84ff;
-  --ios-red: #ff453a;
-  --ios-separator: rgba(255, 255, 255, 0.08);
-  
-  --font-system: "Outfit", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-  --radius-ios: 14px;
-  --radius-ios-lg: 24px;
+  --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Light Mode Palette */
+  --window-bg: #ececec;
+  --content-bg: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #c3c3c3;
+  --text-main: #333333;
+  --text-muted: #888888;
+  --accent-blue: #007af5;
+  --accent-hover: #0062c4;
+  --accent-text: #ffffff;
+  --control-bg: #ffffff;
+  --control-hover: #f2f2f2;
+  --success: #1a9d3a;
+  --danger: #d70015;
+  --border-color: #dcdcdc;
+  --shadow-color: rgba(0, 0, 0, 0.15);
+  --placeholder-color: #bbbbbb;
 }
 
-/* Reset and basic setup */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Mode Palette */
+    --window-bg: #2d2d2d;
+    --content-bg: #1e1e1e;
+    --input-bg: #2d2d2d;
+    --input-border: #4a4a4a;
+    --text-main: #dfdfdf;
+    --text-muted: #8e8e8e;
+    --accent-blue: #0a84ff;
+    --accent-hover: #0066d6;
+    --accent-text: #ffffff;
+    --control-bg: #3a3a3a;
+    --control-hover: #454545;
+    --success: #30d158;
+    --danger: #ff453a;
+    --border-color: #383838;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --placeholder-color: #555555;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html { -webkit-text-size-adjust: 100%; }
+
 body {
-  font-family: var(--font-system);
-  background: radial-gradient(circle at 10% 20%, rgba(10, 84, 255, 0.09) 0%, rgba(9, 7, 15, 1) 90%),
-              radial-gradient(circle at 90% 80%, rgba(177, 133, 255, 0.09) 0%, rgba(9, 7, 15, 1) 90%),
-              #09070f;
-  color: var(--text-primary);
-  min-height: 100vh;
+  background-color: var(--content-bg);
+  color: var(--text-main);
+  font-family: var(--font-stack);
+  min-height: 100dvh;
   display: flex;
-  overflow-x: hidden;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  padding-top: max(1.5rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
   -webkit-font-smoothing: antialiased;
-  position: relative;
 }
 
-/* Ambient floating glow circles */
-body::before {
-  content: "";
-  position: absolute;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(138, 92, 246, 0.08) 0%, transparent 70%);
-  top: 10%;
-  left: 20%;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* iOS glassmorphism (Material Dark) */
-.glass {
-  background: rgba(28, 28, 30, 0.65);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Layout container */
-.app-container {
-  display: flex;
+/* macOS Window Simulator */
+.macos-window {
+  background-color: var(--window-bg);
+  border-radius: 12px;
   width: 100%;
-  min-height: 100vh;
-  background: transparent;
+  box-shadow: 0 20px 40px var(--shadow-color), 0 0 0 1px rgba(0,0,0,0.05);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* macOS Title Bar */
+.title-bar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
   position: relative;
-  z-index: 1;
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  flex: none;
 }
 
-/* Sidebar / Inputs Panel (iOS Grouped Settings Style) */
-/* Sidebar / Inputs Panel (iOS Grouped Settings Style) */
-.sidebar {
-  width: 250px;
-  min-width: 250px;
-  max-width: 250px;
-  padding: 24px 18px;
+.traffic-lights {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
-  background: var(--bg-secondary);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border-right: 0.5px solid var(--ios-separator);
-  height: 100vh;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  box-sizing: border-box;
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.sidebar.collapsed {
-  margin-left: -250px;
-  border-right-color: transparent;
-}
-
-.app-header h1 {
-  font-size: 1.8rem;
-  font-weight: 800;
-  letter-spacing: -0.8px;
-  color: var(--text-primary);
-  background: linear-gradient(135deg, #ffffff 30%, #a19ebb 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.panel-section {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
 }
 
-.panel-section.row {
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-close { background-color: #ff5f56; border: 0.5px solid #e0443e; }
+.dot-minimize { background-color: #ffbd2e; border: 0.5px solid #dfa123; }
+.dot-zoom { background-color: #27c93f; border: 0.5px solid #1aab29; }
+
+.window-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+/* Window Content Pane */
+.content-pane {
+  background-color: var(--content-bg);
+  padding: 20px;
+  display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
+  min-height: 0;
 }
 
-.panel-section.row button {
-  width: 100%;
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
 }
 
-.section-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  padding-left: 4px;
+label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
 }
 
-/* Textarea - iOS Input Field Style */
 textarea {
   width: 100%;
-  height: 280px;
-  background: var(--bg-tertiary);
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  border-radius: var(--radius-ios);
-  padding: 16px;
-  color: var(--text-primary);
-  font-family: var(--font-system);
-  font-size: 1.05rem;
-  line-height: 1.4;
-  resize: none;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
   outline: none;
-  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 textarea:focus {
-  background: rgba(58, 58, 60, 0.8);
-  border-color: rgba(10, 132, 255, 0.4);
-  box-shadow: 0 0 12px rgba(10, 132, 255, 0.15);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.35);
 }
 
-/* iOS Standard Button Style with bouncy transforms */
+textarea::placeholder { color: var(--placeholder-color); }
+
+textarea:disabled { opacity: 0.55; }
+
+.hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* macOS Push Button */
 .btn {
-  font-family: var(--font-system);
-  font-size: 0.95rem;
-  font-weight: 600;
-  padding: 14px 20px;
-  border-radius: var(--radius-ios);
+  height: 32px;
+  padding: 0 14px;
+  background-color: var(--accent-blue);
+  color: var(--accent-text);
   border: none;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  user-select: none;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s, box-shadow 0.2s, opacity 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  outline: none;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+  touch-action: manipulation;
+  flex: none;
 }
 
-.btn:hover {
-  transform: scale(1.03);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+.btn-block { width: 100%; }
+
+.btn:hover:not(:disabled) { background-color: var(--accent-hover); }
+.btn:active:not(:disabled) { opacity: 0.85; }
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
 }
 
-.btn:active {
-  transform: scale(0.97);
-  opacity: 0.9;
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.btn-primary {
-  background: var(--ios-blue);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.15);
-}
-
+/* Secondary / bezeled button */
 .btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--ios-blue);
-  border: 1px solid rgba(255, 255, 255, 0.02);
+  background-color: var(--control-bg);
+  color: var(--text-main);
+  border: 1px solid var(--input-border);
 }
 
-.btn-secondary:hover {
-  background: rgba(58, 58, 60, 0.8);
-  color: #ffffff;
+.btn-secondary:hover:not(:disabled) { background-color: var(--control-hover); }
+
+.btn-danger { background-color: var(--danger); color: #ffffff; }
+.btn-danger:hover:not(:disabled) { background-color: var(--danger); opacity: 0.88; }
+
+/* Inline status line — used instead of alert() so errors never block. */
+.status {
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  min-height: 1.4em;
+  color: var(--text-muted);
 }
 
-.btn-outline {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+.status.error { color: var(--danger); font-weight: 500; }
+
+/* ---- Phone ---- */
+@media (max-width: 520px) {
+  body {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .macos-window {
+    max-width: none;
+    min-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .title-bar {
+    height: calc(46px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Set-dressing on desktop; only a mis-tap target on a phone. */
+  .traffic-lights { display: none; }
+
+  .window-title {
+    position: static;
+    transform: none;
+    font-size: 17px;
+  }
+
+  .content-pane {
+    flex: 1;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    gap: 18px;
+  }
+
+  textarea {
+    /* 16px stops iOS Safari zooming the page on focus. */
+    font-size: 16px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .btn {
+    height: 46px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
+
+  .hint, .status { font-size: 13px; }
 }
 
-.btn-remove {
-  background: var(--ios-red);
-  color: #ffffff;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+/* ==================== end shared shell ==================== */
+
+/* ==================== Wheel of Fortune ==================== */
+
+/* Canvas cannot resolve var() in fillStyle/strokeStyle, so script.js reads
+   these through getComputedStyle. Keep them as literal colors. */
+:root {
+  --wheel-rim: #c9c9c9;
+  --wheel-placeholder-inner: #f7f7f7;
+  --wheel-placeholder-outer: #e9e9e9;
+  --wheel-slice-divider: rgba(255, 255, 255, 0.7);
+  --wheel-gold-light: #ffe066;
+  --wheel-gold: #f5b800;
 }
 
-/* Main Area / Wheel layout */
-.main-content {
-  flex: 1;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wheel-rim: #4a4a4a;
+    --wheel-placeholder-inner: #262626;
+    --wheel-placeholder-outer: #191919;
+    --wheel-slice-divider: rgba(0, 0, 0, 0.4);
+    --wheel-gold-light: #ffe066;
+    --wheel-gold: #ffd60a;
+  }
+}
+
+.macos-window {
+  max-width: 1100px;
+  height: calc(100dvh - 3rem);
+}
+
+/* Sidebar toggle lives in the toolbar, the way macOS apps do it. */
+.title-bar-actions {
+  margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 6px;
+  z-index: 1;
+}
+
+.icon-btn {
+  width: 26px;
+  height: 22px;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 10px;
-  background: var(--bg-primary);
-  height: 100vh;
+  touch-action: manipulation;
+}
+
+.icon-btn:hover { background-color: var(--control-hover); color: var(--text-main); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
+
+/* Glyph is CSS-driven so it can mean "slide out" on desktop and
+   "fold up" on a phone. */
+.icon-btn::before { content: "\25C0"; }
+.icon-btn[aria-expanded="false"]::before { content: "\25B6"; }
+
+.split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   overflow: hidden;
 }
 
-.wheel-outer-container {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
+.sidebar {
+  width: 260px;
+  flex: none;
+  background-color: var(--window-bg);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  transition: margin-left 0.25s ease;
 }
 
-/* Static pointer needle pointing down with neon ambient glow */
+.sidebar.collapsed {
+  margin-left: -260px;
+  border-right-color: transparent;
+}
+
+.sidebar-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.names-group { flex: none; }
+
+#names-input {
+  height: 240px;
+  resize: none;
+  line-height: 1.5;
+}
+
+.button-row {
+  display: flex;
+  gap: 6px;
+}
+
+.button-row .btn {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.settings-group {
+  border-top: 1px solid var(--border-color);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.setting-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.stepper-row.hidden { display: none; }
+
+/* Switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex: none;
+}
+
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  background-color: var(--input-border);
+  border-radius: 22px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.switch-track::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  top: 2px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.switch input:checked + .switch-track { background-color: var(--accent-blue); }
+.switch input:checked + .switch-track::before { transform: translateX(16px); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+
+/* Stepper */
+.stepper {
+  display: flex;
+  align-items: center;
+  background-color: var(--control-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  overflow: hidden;
+  height: 26px;
+  flex: none;
+}
+
+.btn-stepper {
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  font-size: 14px;
+  width: 28px;
+  height: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+.btn-stepper:hover:not(:disabled) { background-color: var(--control-hover); }
+.btn-stepper:disabled { color: var(--text-muted); opacity: 0.45; cursor: not-allowed; }
+
+.stepper-value {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 26px;
+  text-align: center;
+  color: var(--text-main);
+  user-select: none;
+  border-left: 1px solid var(--input-border);
+  border-right: 1px solid var(--input-border);
+  line-height: 24px;
+}
+
+/* Stage */
+.stage {
+  flex: 1;
+  min-width: 0;
+  background-color: var(--content-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.wheel-outer {
+  position: relative;
+  max-width: 100%;
+}
+
 .pointer-arrow {
   position: absolute;
-  top: -16px;
+  top: -13px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 10px rgba(10, 132, 255, 0.5));
+  line-height: 0;
+  color: var(--accent-blue);
+  filter: drop-shadow(0 2px 3px var(--shadow-color));
 }
 
-/* Wheel Wrapper style with heavy depth shading */
+.pointer-arrow svg { fill: currentColor; }
+
 .wheel-wrapper {
   position: relative;
-  width: min(84vh, 84vw);
-  height: min(84vh, 84vw);
+  width: min(72dvh, 72vw, 620px);
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(138, 92, 246, 0.15);
-  border: 4px solid var(--ios-separator);
-  background: var(--bg-secondary);
+  box-shadow: 0 8px 28px var(--shadow-color);
 }
 
 #wheel-canvas {
@@ -250,375 +550,192 @@ textarea:focus {
   height: 100%;
   border-radius: 50%;
   display: block;
+  touch-action: manipulation;
 }
 
-/* iOS Picker hub button style with pulsing breathing glow */
+/* Hub */
 .spin-hub {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 90px;
-  height: 90px;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #2c2c2e 0%, #1c1c1e 100%);
-  border: 3px solid rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  font-family: var(--font-system);
-  font-weight: 750;
-  font-size: 1.15rem;
-  letter-spacing: -0.3px;
+  background-color: var(--content-bg);
+  border: 1px solid var(--input-border);
+  color: var(--accent-blue);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.5px;
   cursor: pointer;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8), 0 0 10px rgba(177, 133, 255, 0.2);
+  box-shadow: 0 3px 10px var(--shadow-color);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 4;
-  outline: none;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s, box-shadow 0.2s, color 0.2s;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
   user-select: none;
-  animation: hub-pulse 2.2s infinite ease-in-out;
+  touch-action: manipulation;
 }
 
-.spin-hub:hover {
-  transform: translate(-50%, -50%) scale(1.08);
-  border-color: var(--ios-blue);
-  box-shadow: 0 12px 30px rgba(10, 132, 255, 0.5), 0 0 25px rgba(177, 133, 255, 0.5);
-  color: var(--ios-blue);
+.spin-hub:hover:not(:disabled) {
+  background-color: var(--accent-blue);
+  color: var(--accent-text);
 }
 
-.spin-hub:active {
-  transform: translate(-50%, -50%) scale(0.92);
-  background: #111112;
-}
+.spin-hub:active:not(:disabled) { transform: translate(-50%, -50%) scale(0.95); }
+.spin-hub:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
+.spin-hub:disabled { color: var(--text-muted); cursor: default; }
 
-@keyframes hub-pulse {
-  0% { box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8), 0 0 10px rgba(177, 133, 255, 0.2); }
-  50% { box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8), 0 0 25px rgba(177, 133, 255, 0.45); }
-  100% { box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8), 0 0 10px rgba(177, 133, 255, 0.2); }
-}
-
-/* Festive Pop-up Winner Style */
+/* Winner dialog */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 20px;
   z-index: 100;
   opacity: 1;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
+  visibility: visible;
+  transition: opacity 0.2s ease, visibility 0.2s;
+  overflow-y: auto;
 }
 
 .modal-overlay.hidden {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
-/* Festive Celebratory Card */
 .modal-content {
-  width: min(440px, 90%);
-  border-radius: var(--radius-ios-lg);
+  width: min(400px, 100%);
+  margin: auto;
+  background-color: var(--window-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px var(--shadow-color);
+  padding: 24px;
   text-align: center;
   position: relative;
-  overflow: hidden;
   transform: scale(1);
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  background: rgba(25, 25, 28, 0.95);
-  border: 1.5px solid rgba(255, 214, 10, 0.45);
-  box-shadow: 0 20px 80px rgba(255, 214, 10, 0.25), 0 10px 40px rgba(0, 0, 0, 0.6);
-  display: flex;
-  flex-direction: column;
+  transition: transform 0.2s ease;
 }
 
-.modal-overlay.hidden .modal-content {
-  transform: scale(0.8);
-}
+.modal-overlay.hidden .modal-content { transform: scale(0.94); }
 
-.modal-header {
-  font-family: var(--font-system);
-  font-weight: 800;
-  font-size: 1.5rem;
-  letter-spacing: 2px;
-  color: #ffd60a;
-  padding: 36px 24px 8px 24px;
-}
-
-/* Show sparkles with pulse animation */
-.sparkle {
-  display: inline-block;
-  animation: sparkle-pulse 1s infinite alternate;
+.modal-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
 .modal-winner-name {
-  font-family: var(--font-system);
-  font-weight: 800;
-  font-size: 2.8rem;
-  line-height: 1.2;
-  word-wrap: break-word;
-  background: linear-gradient(135deg, #ffffff 10%, #ffd60a 50%, #ff9f0a 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  padding: 8px 24px 36px 24px;
-  text-shadow: 0 4px 30px rgba(255, 214, 10, 0.4);
-  animation: winner-glow 1.5s infinite alternate ease-in-out;
+  font-size: clamp(1.6rem, 7vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+  margin-bottom: 22px;
 }
 
-/* iOS-Style Pill Buttons Grid (Side-by-side) */
+.winner-list {
+  text-align: left;
+  margin: 4px auto 0;
+  padding-left: 24px;
+  display: inline-block;
+  font-size: 1.05rem;
+  font-weight: 500;
+  line-height: 1.7;
+  max-height: 40dvh;
+  overflow-y: auto;
+}
+
 .modal-actions {
   display: flex;
-  flex-direction: row;
-  gap: 12px;
-  padding: 0 24px 32px 24px;
-  border-top: none;
+  gap: 8px;
 }
 
-.modal-actions button {
-  flex: 1;
-  height: 50px;
-  font-family: var(--font-system);
-  font-size: 0.95rem;
-  font-weight: 600;
-  border-radius: var(--radius-ios);
-  border: none;
-  cursor: pointer;
-  outline: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.15s ease, transform 0.1s ease;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
+.modal-actions .btn { flex: 1; height: 36px; }
 
-.modal-actions button:active {
-  opacity: 0.8;
-  transform: scale(0.97);
-}
-
-#btn-remove-winner {
-  background: var(--ios-red);
-  color: #ffffff;
-  border-bottom: none;
-}
-
-#btn-keep-winner {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-/* Full screen confetti overlay */
 .confetti-container {
   display: block;
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   pointer-events: none;
   z-index: 101;
   overflow: hidden;
 }
 
-@keyframes sparkle-pulse {
-  from { transform: scale(1); opacity: 0.8; }
-  to { transform: scale(1.3); opacity: 1; }
-}
+/* ---- Stacked layout ----
+   The sidebar and a usable wheel stop fitting side by side well before the
+   shared 520px phone breakpoint, so the split stacks earlier. */
+@media (max-width: 820px) {
+  .macos-window { height: auto; min-height: calc(100dvh - 3rem); }
 
-@keyframes winner-glow {
-  from { filter: drop-shadow(0 0 5px rgba(255, 214, 10, 0.2)); }
-  to { filter: drop-shadow(0 0 15px rgba(255, 214, 10, 0.6)); }
-}
-
-/* Responsive layout constraints */
-@media (max-width: 1024px) {
-  .app-container {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
+  .split { flex-direction: column; overflow: visible; }
 
   .sidebar {
-    height: auto;
-    position: relative;
+    width: 100%;
     border-right: none;
-    border-bottom: 0.5px solid var(--ios-separator);
-    border-radius: 0;
+    border-bottom: 1px solid var(--border-color);
+    overflow: visible;
+    transition: none;
   }
 
-  .main-content {
-    min-height: 70vh;
-    padding: 30px;
+  /* Stacked, the panel folds up instead of sliding sideways. */
+  .sidebar.collapsed {
+    margin-left: 0;
+    border-bottom-color: var(--border-color);
   }
 
-  .wheel-wrapper {
-    width: 460px;
-    height: 460px;
-  }
+  .sidebar.collapsed .sidebar-body { display: none; }
+
+  .icon-btn::before { content: "\25B2"; }
+  .icon-btn[aria-expanded="false"]::before { content: "\25BC"; }
+
+  /* Kept short on purpose: the panel and the wheel share one screen,
+     and the wheel is what people came for. */
+  #names-input { height: clamp(112px, 17dvh, 190px); }
+
+  .stage { padding: 20px 16px 24px; }
+
+  .wheel-wrapper { width: min(84vw, 56dvh); }
 }
 
-@media (max-width: 540px) {
-  .wheel-wrapper {
-    width: 320px;
-    height: 320px;
-  }
+@media (max-width: 520px) {
+  .macos-window { min-height: 100dvh; }
 
-  .spin-hub {
-    width: 70px;
-    height: 70px;
-    font-size: 0.95rem;
-  }
-}
+  .icon-btn { width: 40px; height: 34px; font-size: 12px; }
 
-/* Sidebar Toggle Arrow Tab */
+  .sidebar-body { padding: 16px; gap: 16px; }
 
-/* Sidebar Toggle Arrow Tab */
-.sidebar-toggle {
-  position: absolute;
-  right: -28px;
-  top: 24px;
-  width: 28px;
-  height: 50px;
-  background: var(--bg-secondary);
-  border: 0.5px solid var(--ios-separator);
-  border-left: none;
-  border-radius: 0 10px 10px 0;
-  color: var(--ios-blue);
-  font-size: 0.8rem;
-  font-weight: bold;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 15;
-  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.4);
-  transition: background-color 0.2s, color 0.2s;
-  outline: none;
-  padding: 0;
-}
+  #names-input { font-size: 16px; }
 
-.sidebar-toggle:hover {
-  color: #ffffff;
-}
+  .button-row .btn { font-size: 14px; }
 
-.sidebar-toggle:active {
-  background-color: var(--bg-tertiary);
-}
+  .setting-label { font-size: 15px; }
 
-/* iOS Toggle Switch */
-.setting-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  user-select: none;
-}
+  .switch { width: 46px; height: 28px; }
+  .switch-track::before { width: 24px; height: 24px; }
+  .switch input:checked + .switch-track::before { transform: translateX(18px); }
 
-.ios-switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  margin-left: auto;
-}
+  .stepper { height: 34px; }
+  .btn-stepper { width: 40px; font-size: 17px; }
+  .stepper-value { line-height: 32px; font-size: 15px; min-width: 32px; }
 
-.ios-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
+  .spin-hub { width: 76px; height: 76px; font-size: 14px; }
 
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--bg-tertiary);
-  border: 0.5px solid var(--ios-separator);
-  transition: .2s;
-  border-radius: 24px;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 1px;
-  bottom: 1.5px;
-  background-color: white;
-  transition: .2s;
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-input:checked + .slider {
-  background-color: #30d158; /* iOS green */
-  border-color: #30d158;
-}
-
-input:checked + .slider:before {
-  transform: translateX(20px);
-}
-
-/* Stepper CSS */
-.turbo-stepper-container {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--ios-separator);
-}
-
-.turbo-stepper-container.hidden {
-  display: none !important;
-}
-
-.stepper-label {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.stepper {
-  display: flex;
-  align-items: center;
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--ios-separator);
-  border-radius: 8px;
-  overflow: hidden;
-  height: 28px;
-}
-
-.btn-stepper {
-  background: transparent;
-  border: none;
-  color: var(--ios-blue);
-  font-size: 1.1rem;
-  width: 32px;
-  height: 100%;
-  cursor: pointer;
-  outline: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.1s;
-}
-
-.btn-stepper:active {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.stepper-value {
-  font-size: 0.9rem;
-  font-weight: 600;
-  width: 28px;
-  text-align: center;
-  color: var(--text-primary);
-  user-select: none;
+  /* Plain column, not column-reverse: it keeps Remove in the same
+     "far / primary" slot it occupies on desktop. */
+  .modal-actions { flex-direction: column; }
+  .modal-actions .btn { height: 44px; }
 }

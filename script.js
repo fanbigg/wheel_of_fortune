@@ -1,17 +1,23 @@
-// Global state variables
-let items = [];
+'use strict';
+
+/* ---------------- Global state ---------------- */
 let rotationAngle = 0;
 let isSpinning = false;
 let audioCtx = null;
 let isTurbo = false;
 let turboCount = 3;
 let lastWinnerIndices = [];
+let lastWinnerIndex = -1;
 let poppedOutSlices = [];
 let currentTurboSpinIndex = 0;
+// Snapshot of the names taken when a spin starts. Winners are tracked by index,
+// so the list must not shift underneath the animation.
+let spinList = null;
+let lastFocusedBeforeModal = null;
 
-
-// DOM Elements
+/* ---------------- DOM Elements ---------------- */
 const namesInput = document.getElementById('names-input');
+const namesCount = document.getElementById('names-count');
 const btnShuffle = document.getElementById('btn-shuffle');
 const btnClear = document.getElementById('btn-clear');
 const btnSample = document.getElementById('btn-sample');
@@ -25,109 +31,139 @@ const btnKeepWinner = document.getElementById('btn-keep-winner');
 const confettiContainer = document.getElementById('confetti-container');
 const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
 const sidebarPanel = document.getElementById('sidebar-panel');
-const appContainer = document.querySelector('.app-container');
 
-// Turbo Play elements
+/* Turbo Play elements */
 const turboToggle = document.getElementById('turbo-toggle');
 const turboStepperContainer = document.getElementById('turbo-stepper-container');
 const btnStepperMinus = document.getElementById('btn-stepper-minus');
 const btnStepperPlus = document.getElementById('btn-stepper-plus');
 const stepperValue = document.getElementById('stepper-value');
 
-// Sample names list
+/* Sample names list */
 const defaultNames = [
-  "Alice",
-  "Bob",
-  "Charlie",
-  "David",
-  "Emily",
-  "Frank",
-  "Grace",
-  "Henry",
-  "Isabella",
-  "Jack"
+  "Alice", "Bob", "Charlie", "David", "Emily",
+  "Frank", "Grace", "Henry", "Isabella", "Jack"
 ];
 
-// Audio synthesizer for Apple Watch style crown haptic tick sound
+const prefersReducedMotion = typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- Theme bridge ----------------
+   Canvas fillStyle/strokeStyle cannot resolve CSS var() — assigning
+   "var(--x)" is silently ignored and the previous style stays in effect.
+   Resolve the custom properties through the cascade instead. */
+function themeColor(name, fallback) {
+  let value = '';
+  try {
+    value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  } catch (e) { /* non-browser test harness */ }
+  return value || fallback;
+}
+
+function currentScheme() {
+  return (typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+
+let palette = null;
+let paletteScheme = null;
+
+// Re-reading eight custom properties every animation frame would be wasteful,
+// but a cache that never expires leaves the wheel painted in the old theme
+// after a light/dark switch. Key the cache on the scheme instead of trusting a
+// change event to arrive.
+function getPalette() {
+  const scheme = currentScheme();
+  if (palette && paletteScheme === scheme) return palette;
+
+  palette = {
+    rim: themeColor('--wheel-rim', '#c9c9c9'),
+    placeholderInner: themeColor('--wheel-placeholder-inner', '#f7f7f7'),
+    placeholderOuter: themeColor('--wheel-placeholder-outer', '#e9e9e9'),
+    divider: themeColor('--wheel-slice-divider', 'rgba(255, 255, 255, 0.7)'),
+    goldLight: themeColor('--wheel-gold-light', '#ffe066'),
+    gold: themeColor('--wheel-gold', '#f5b800'),
+    border: themeColor('--input-border', '#c3c3c3'),
+    muted: themeColor('--text-muted', '#888888')
+  };
+  paletteScheme = scheme;
+  return palette;
+}
+
+/* ---------------- Audio ---------------- */
+function ensureAudioContext() {
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return null;
+  if (!audioCtx) audioCtx = new Ctor();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// Apple Watch style crown haptic tick
+let lastTickTime = 0;
 function playTickSound() {
   try {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    const filter = audioCtx.createBiquadFilter();
-    
+    const ac = ensureAudioContext();
+    if (!ac) return;
+
+    // A fast wheel with many slices can request ticks faster than they are
+    // audible; throttling keeps it from stacking dozens of oscillators.
+    if (ac.currentTime - lastTickTime < 0.022) return;
+    lastTickTime = ac.currentTime;
+
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    const filter = ac.createBiquadFilter();
+
     osc.type = 'sine';
-    // Very high, crisp frequency haptic tick
-    osc.frequency.setValueAtTime(1600, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.012);
-    
+    osc.frequency.setValueAtTime(1600, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(800, ac.currentTime + 0.012);
+
     filter.type = 'highpass';
-    filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
-    
-    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.012);
-    
+    filter.frequency.setValueAtTime(1000, ac.currentTime);
+
+    gain.gain.setValueAtTime(0.06, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.012);
+
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(audioCtx.destination);
-    
+    gain.connect(ac.destination);
+
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.015);
+    osc.stop(ac.currentTime + 0.015);
   } catch (e) {
-    // Audio context not allowed or failed, ignore
+    // Audio blocked or unavailable — the wheel still works silently.
   }
 }
 
 // Apple Pay style dual chime win sound
 function playSuccessSound() {
   try {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    
-    const now = audioCtx.currentTime;
-    
-    // First chime (C6, 1046.50Hz)
-    const osc1 = audioCtx.createOscillator();
-    const gain1 = audioCtx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(1046.50, now);
-    gain1.gain.setValueAtTime(0.12, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    osc1.connect(gain1);
-    gain1.connect(audioCtx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.16);
-    
-    // Second chime (E6, 1318.51Hz), starting 80ms later
-    const osc2 = audioCtx.createOscillator();
-    const gain2 = audioCtx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1318.51, now + 0.08);
-    gain2.gain.setValueAtTime(0.12, now + 0.08);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.08 + 0.3);
-    osc2.connect(gain2);
-    gain2.connect(audioCtx.destination);
-    osc2.start(now + 0.08);
-    osc2.stop(now + 0.08 + 0.32);
-    
+    const ac = ensureAudioContext();
+    if (!ac) return;
+    const now = ac.currentTime;
+
+    [[1046.50, 0, 0.15], [1318.51, 0.08, 0.3]].forEach(([freq, offset, decay]) => {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + offset);
+      gain.gain.setValueAtTime(0.12, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + decay);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start(now + offset);
+      osc.stop(now + offset + decay + 0.02);
+    });
   } catch (e) {
-    // Audio context not allowed or failed, ignore
+    // Audio blocked or unavailable.
   }
 }
 
+/* ---------------- Names ---------------- */
+
 // Custom HSL colors for slices based on index and total
 function getSliceColor(index, total) {
-  // Use a nice spaced out HSL palette to ensure vibrant colors
   const hue = (index * (360 / total)) % 360;
   return `hsl(${hue}, 70%, 50%)`;
 }
@@ -140,46 +176,70 @@ function getNamesList() {
     .filter(name => name.length > 0);
 }
 
-// Clean cheat character for visual rendering (no prefix check is needed now)
+// The list the wheel should currently render: frozen mid-spin, live otherwise.
+function activeList() {
+  return spinList || getNamesList();
+}
+
 function cleanName(name) {
   return name;
 }
 
-// Check if name is a cheat name (no prefix check is needed now)
 function isCheatName(name) {
   return false;
 }
 
-// Draw the wheel onto the canvas
+/* ---------------- Canvas sizing ---------------- */
+
+// Match the backing store to the CSS box times the device pixel ratio so the
+// wheel stays sharp on retina screens and after the sidebar collapses.
+function resizeCanvas() {
+  if (typeof canvas.getBoundingClientRect !== 'function') return false;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return false;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const size = Math.max(1, Math.round(rect.width * dpr));
+  if (canvas.width === size && canvas.height === size) return false;
+
+  canvas.width = size;
+  canvas.height = size;
+  return true;
+}
+
+/* ---------------- Rendering ---------------- */
 function drawWheel() {
   const width = canvas.width;
   const height = canvas.height;
   const cx = width / 2;
   const cy = height / 2;
-  const radius = Math.min(cx, cy) - 15;
+  // Every hard-coded size below was tuned against an 800px canvas; scale keeps
+  // the proportions identical at any backing-store resolution.
+  const scale = width / 800;
+  const radius = Math.min(cx, cy) - 15 * scale;
 
-  // Clear canvas
   ctx.clearRect(0, 0, width, height);
 
-  const list = getNamesList();
+  const list = activeList();
+  const theme = getPalette();
+
   if (list.length === 0) {
-    // Draw placeholder
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
     const placeholderGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-    placeholderGrad.addColorStop(0, '#1d173e');
-    placeholderGrad.addColorStop(1, '#0b0816');
+    placeholderGrad.addColorStop(0, theme.placeholderInner);
+    placeholderGrad.addColorStop(1, theme.placeholderOuter);
     ctx.fillStyle = placeholderGrad;
     ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'var(--panel-border)';
+    ctx.lineWidth = 4 * scale;
+    ctx.strokeStyle = theme.border;
     ctx.stroke();
 
-    ctx.fillStyle = 'var(--text-secondary)';
-    ctx.font = "bold 20px 'Outfit'";
+    ctx.fillStyle = theme.muted;
+    ctx.font = `bold ${Math.round(22 * scale)}px 'Outfit', sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText("Enter names in the sidebar", cx, cy);
+    ctx.fillText('Add names to spin', cx, cy);
     return;
   }
 
@@ -188,29 +248,23 @@ function drawWheel() {
   for (let i = 0; i < list.length; i++) {
     const angle = rotationAngle + i * arc;
     const isPopped = poppedOutSlices.includes(i);
-    
-    // Calculate slice center angle
     const midAngle = angle + arc / 2;
-    
-    // Shift center coordinate if popped out
-    const shiftDistance = isPopped ? 18 : 0;
+
+    const shiftDistance = isPopped ? 18 * scale : 0;
     const scx = cx + Math.cos(midAngle) * shiftDistance;
     const scy = cy + Math.sin(midAngle) * shiftDistance;
-    
-    // Draw slice
+
     ctx.beginPath();
     ctx.moveTo(scx, scy);
     ctx.arc(scx, scy, radius, angle, angle + arc);
     ctx.closePath();
-    
+
     if (isPopped) {
-      // Golden gradient fill
       const grad = ctx.createRadialGradient(scx, scy, 0, scx, scy, radius);
-      grad.addColorStop(0, '#ffe066');
-      grad.addColorStop(1, '#ffd60a');
+      grad.addColorStop(0, theme.goldLight);
+      grad.addColorStop(1, theme.gold);
       ctx.fillStyle = grad;
     } else {
-      // Custom HSL radial gradient to make the wheel look glowing and three-dimensional
       const hue = (i * (360 / list.length)) % 360;
       const grad = ctx.createRadialGradient(scx, scy, radius * 0.1, scx, scy, radius);
       grad.addColorStop(0, `hsl(${hue}, 88%, 62%)`);
@@ -218,70 +272,66 @@ function drawWheel() {
       ctx.fillStyle = grad;
     }
     ctx.fill();
-    
-    // Slice border lines
-    ctx.lineWidth = isPopped ? 3 : 2;
-    ctx.strokeStyle = isPopped ? '#ffffff' : 'rgba(10, 8, 19, 0.4)';
+
+    ctx.lineWidth = (isPopped ? 3 : 2) * scale;
+    ctx.strokeStyle = isPopped ? '#ffffff' : theme.divider;
     ctx.stroke();
 
-    // Draw text
+    /* Slice label */
     ctx.save();
     ctx.translate(scx, scy);
-    // Rotate text to the center of the slice
-    ctx.rotate(angle + arc / 2);
-    
+    ctx.rotate(midAngle);
+
     ctx.fillStyle = isPopped ? '#000000' : '#ffffff';
-    // Scale text font size based on slice count
+
     let fontSize = 20;
     if (list.length > 20) fontSize = 12;
     else if (list.length > 12) fontSize = 15;
-
-    ctx.font = `bold ${fontSize}px 'Outfit'`;
+    ctx.font = `bold ${Math.max(8, Math.round(fontSize * scale))}px 'Outfit', sans-serif`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    
-    // Shadow effect for text readability (only for normal white text)
+
     if (!isPopped) {
       ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetX = 1;
-      ctx.shadowOffsetY = 1;
+      ctx.shadowBlur = 4 * scale;
+      ctx.shadowOffsetX = 1 * scale;
+      ctx.shadowOffsetY = 1 * scale;
     }
 
-    // Draw name
-    const displayName = cleanName(list[i]);
+    let text = cleanName(list[i]);
     const maxTextWidth = radius * 0.7;
-    
-    // Truncate name if it's too long
-    let text = displayName;
     if (ctx.measureText(text).width > maxTextWidth) {
-      while (ctx.measureText(text + "...").width > maxTextWidth && text.length > 0) {
+      while (text.length > 0 && ctx.measureText(text + '…').width > maxTextWidth) {
         text = text.slice(0, -1);
       }
-      text += "...";
+      text += '…';
     }
 
-    ctx.fillText(text, radius - 30, 0);
+    ctx.fillText(text, radius - 30 * scale, 0);
     ctx.restore();
   }
 
-  // Draw outer glowing rim
+  /* Outer glowing rim */
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = '#b185ff';
+  ctx.lineWidth = 6 * scale;
+  ctx.strokeStyle = theme.rim;
   ctx.stroke();
 }
 
-// Handle wheel ticking sounds
+function render() {
+  resizeCanvas();
+  drawWheel();
+}
+
+/* ---------------- Tick sounds ---------------- */
 let lastSoundSlice = -1;
 function checkTick(currentRotation, totalSlices) {
   if (totalSlices <= 0) return;
   const arc = (2 * Math.PI) / totalSlices;
-  
-  // Calculate which slice is currently under the pointer at 12 o'clock (1.5 * Math.PI or -Math.PI/2)
-  // Pointer is static at the top. The wheel rotates clockwise.
-  // The relative angle of the pointer on the rotating wheel is (1.5 * Math.PI - currentRotation) mod 2π
+
+  // The pointer is fixed at 12 o'clock (canvas angle 1.5π). Its position on the
+  // rotating wheel is (1.5π − rotation) mod 2π.
   const pointerAngleOnWheel = (1.5 * Math.PI - currentRotation) % (2 * Math.PI);
   const normalizedAngle = pointerAngleOnWheel < 0 ? pointerAngleOnWheel + 2 * Math.PI : pointerAngleOnWheel;
   const currentSlice = Math.floor(normalizedAngle / arc);
@@ -292,11 +342,14 @@ function checkTick(currentRotation, totalSlices) {
   }
 }
 
-// Generate simple visual CSS confetti particles
+/* ---------------- Confetti ---------------- */
 function launchConfetti() {
-  confettiContainer.innerHTML = '';
-  const colors = ['#b185ff', '#00f2fe', '#ff4a83', '#ffff00', '#ff00ff', '#00ffff'];
+  if (prefersReducedMotion) return;
+
+  confettiContainer.replaceChildren();
+  const colors = ['#007af5', '#34c759', '#ff9500', '#ff375f', '#af52de', '#ffd60a'];
   const particleCount = 100;
+  const created = [];
 
   for (let i = 0; i < particleCount; i++) {
     const p = document.createElement('div');
@@ -309,313 +362,366 @@ function launchConfetti() {
     p.style.opacity = Math.random() * 0.5 + 0.5;
     p.style.borderRadius = '2px';
     p.style.transform = `rotate(${Math.random() * 360}deg)`;
-    
-    // Animate falling
-    const duration = Math.random() * 2 + 2; // 2-4 seconds
+
+    const duration = Math.random() * 2 + 2;
     const delay = Math.random() * 0.5;
     p.style.transition = `transform ${duration}s linear ${delay}s, top ${duration}s linear ${delay}s, opacity ${duration}s ease-out ${delay}s`;
-    
-    confettiContainer.appendChild(p);
 
-    // Force reflow and apply translation to trigger CSS transition
-    setTimeout(() => {
+    confettiContainer.appendChild(p);
+    created.push(p);
+  }
+
+  requestAnimationFrame(() => {
+    created.forEach(p => {
       p.style.top = '110%';
       p.style.transform = `translate3d(${Math.random() * 100 - 50}px, 0, 0) rotate(${Math.random() * 720}deg)`;
       p.style.opacity = '0';
-    }, 50);
-  }
+    });
+  });
+
+  // Leaving 100 nodes in the DOM after every spin adds up over a long session.
+  setTimeout(() => confettiContainer.replaceChildren(), 5000);
 }
 
-// Easing function for smooth deceleration (cubic ease-out)
+/* ---------------- Spin ---------------- */
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-// Main spin animation
-let lastWinnerIndex = -1;
+function setControlsDisabled(disabled) {
+  spinButton.disabled = disabled;
+  namesInput.disabled = disabled;
+  [btnShuffle, btnClear, btnSample, turboToggle, btnStepperMinus, btnStepperPlus]
+    .forEach(el => { if (el) el.disabled = disabled; });
+  if (!disabled) updateStepperState();
+}
 
 function spinWheel() {
   if (isSpinning) return;
 
   const list = getNamesList();
   if (list.length === 0) {
-    alert("Please enter names to spin!");
+    // Nagging about empty names is useless if the panel that holds them is
+    // folded away, which is the default on a phone.
+    expandSidebar();
+    namesInput.focus();
     return;
   }
 
   isSpinning = true;
-  spinButton.disabled = true;
+  spinList = list;
   poppedOutSlices = [];
   currentTurboSpinIndex = 0;
+  lastSoundSlice = -1;
+  setControlsDisabled(true);
 
-  // 1. Identify Target Winner Indices (100% random, supports turbo)
+  // Pick the winning indices up front (uniform random, no weighting).
   if (isTurbo) {
-    const targetIndices = [];
-    const availableIndices = Array.from({ length: list.length }, (_, idx) => idx);
+    const available = Array.from({ length: list.length }, (_, idx) => idx);
     const countToPick = Math.min(turboCount, list.length);
-    for (let idx = 0; idx < countToPick; idx++) {
-      const randIdx = Math.floor(Math.random() * availableIndices.length);
-      targetIndices.push(availableIndices.splice(randIdx, 1)[0]);
+    const targets = [];
+    for (let i = 0; i < countToPick; i++) {
+      targets.push(available.splice(Math.floor(Math.random() * available.length), 1)[0]);
     }
-    lastWinnerIndices = targetIndices;
+    lastWinnerIndices = targets;
   } else {
-    const targetIndex = Math.floor(Math.random() * list.length);
-    lastWinnerIndices = [targetIndex];
+    lastWinnerIndices = [Math.floor(Math.random() * list.length)];
   }
 
-  // Start the sequential spins
   runSpinSequence();
 }
 
 function runSpinSequence() {
-  const list = getNamesList();
+  const list = spinList;
   const targetIndex = lastWinnerIndices[currentTurboSpinIndex];
   lastWinnerIndex = targetIndex;
 
-  // 2. Calculate stopping angle
   const arc = (2 * Math.PI) / list.length;
-  const randomOffsetInSlice = (Math.random() * 0.6 + 0.2) * arc; // target between 20% and 80% of slice width
-  
-  const targetAngle = (1.5 * Math.PI - (targetIndex * arc + randomOffsetInSlice)) % (2 * Math.PI);
-  const normalizedTargetAngle = targetAngle < 0 ? targetAngle + 2 * Math.PI : targetAngle;
-  
-  // Choose random number of rotations (3 to 5 full spins for subsequent draws to be faster and exciting!)
-  const fullSpins = currentTurboSpinIndex === 0 ? 4 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 2);
-  const startAngle = rotationAngle;
-  const finalAngle = rotationAngle + (fullSpins * 2 * Math.PI) + (normalizedTargetAngle - (rotationAngle % (2 * Math.PI)));
-  const angleDelta = finalAngle - startAngle;
+  const randomOffsetInSlice = (Math.random() * 0.6 + 0.2) * arc;   // land 20–80% into the slice
 
-  // 3. Perform Animation Loop (Slightly faster for subsequent spins)
+  const rawTarget = (1.5 * Math.PI - (targetIndex * arc + randomOffsetInSlice)) % (2 * Math.PI);
+  const normalizedTargetAngle = rawTarget < 0 ? rawTarget + 2 * Math.PI : rawTarget;
+
+  const fullSpins = currentTurboSpinIndex === 0
+    ? 4 + Math.floor(Math.random() * 3)
+    : 2 + Math.floor(Math.random() * 2);
+
+  const startAngle = rotationAngle;
+  // Keep the partial turn positive so the wheel always completes at least
+  // `fullSpins` revolutions rather than shaving one off.
+  let partialTurn = normalizedTargetAngle - (rotationAngle % (2 * Math.PI));
+  if (partialTurn < 0) partialTurn += 2 * Math.PI;
+  const angleDelta = fullSpins * 2 * Math.PI + partialTurn;
+
   const duration = currentTurboSpinIndex === 0 ? 4000 : 2500;
   const startTime = performance.now();
 
   function animate(now) {
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    // Apply easing
-    const easedProgress = easeOutCubic(progress);
-    rotationAngle = startAngle + angleDelta * easedProgress;
+    const progress = Math.min((now - startTime) / duration, 1);
+    rotationAngle = startAngle + angleDelta * easeOutCubic(progress);
 
-    // Draw and tick sound
     drawWheel();
     checkTick(rotationAngle, list.length);
 
     if (progress < 1) {
       requestAnimationFrame(animate);
-    } else {
-      // Completed current spin!
-      rotationAngle = rotationAngle % (2 * Math.PI);
-      
-      // Make this wedge pop out and turn gold
-      poppedOutSlices.push(targetIndex);
-      drawWheel();
-      
-      // Play tick sound to acknowledge landing haptic
-      playTickSound();
+      return;
+    }
 
-      currentTurboSpinIndex++;
-      if (currentTurboSpinIndex < lastWinnerIndices.length) {
-        // Pause shortly then spin to the next winner
-        setTimeout(runSpinSequence, 800);
-      } else {
-        // Finished all spins! Wait a brief moment to showcase the gold wedges then announce
-        setTimeout(() => {
-          isSpinning = false;
-          spinButton.disabled = false;
-          announceWinner(list[lastWinnerIndex]);
-        }, 800);
-      }
+    rotationAngle = rotationAngle % (2 * Math.PI);
+    poppedOutSlices.push(targetIndex);
+    drawWheel();
+    playTickSound();
+
+    currentTurboSpinIndex++;
+    if (currentTurboSpinIndex < lastWinnerIndices.length) {
+      setTimeout(runSpinSequence, 800);
+    } else {
+      setTimeout(() => {
+        isSpinning = false;
+        setControlsDisabled(false);
+        announceWinner(list[lastWinnerIndex]);
+      }, 800);
     }
   }
 
   requestAnimationFrame(animate);
 }
 
-// Show the winner popup
+/* ---------------- Winner modal ---------------- */
 function announceWinner(rawName) {
-  const list = getNamesList();
+  const list = spinList || getNamesList();
+
+  // Built as DOM nodes rather than an innerHTML string: names are free text and
+  // "<img onerror=…>" is a perfectly legal thing to type into the box.
   if (isTurbo && lastWinnerIndices.length > 1) {
-    const winnerNames = lastWinnerIndices.map(idx => cleanName(list[idx]));
-    winnerNameEl.innerHTML = `<ol style="text-align: left; margin: 15px auto; padding: 0 0 0 24px; display: inline-block; font-size: 1.15rem; line-height: 1.6; color: #ffffff;">` +
-      winnerNames.map(name => `<li>${name}</li>`).join('') +
-      `</ol>`;
+    const ol = document.createElement('ol');
+    ol.className = 'winner-list';
+    lastWinnerIndices.forEach(idx => {
+      const li = document.createElement('li');
+      li.textContent = cleanName(list[idx]);
+      ol.appendChild(li);
+    });
+    winnerNameEl.replaceChildren(ol);
   } else {
     winnerNameEl.textContent = cleanName(rawName);
   }
+
+  lastFocusedBeforeModal = document.activeElement;
   winnerModal.classList.remove('hidden');
+  btnKeepWinner.focus();
   launchConfetti();
   playSuccessSound();
 }
 
-// Remove winner from the list
 function removeWinner() {
   if (lastWinnerIndices.length === 0) return;
-  
-  const list = getNamesList();
-  const sortedIndices = [...lastWinnerIndices].sort((a, b) => b - a);
-  sortedIndices.forEach(idx => {
-    if (idx >= 0 && idx < list.length) {
-      list.splice(idx, 1);
-    }
+
+  const list = spinList || getNamesList();
+  // Descending so each splice cannot shift the indices still to be removed.
+  [...lastWinnerIndices].sort((a, b) => b - a).forEach(idx => {
+    if (idx >= 0 && idx < list.length) list.splice(idx, 1);
   });
-  
+
   namesInput.value = list.join('\n');
   saveNamesToStorage();
-  drawWheel();
   closeModal();
+  spinList = null;
+  poppedOutSlices = [];
+  updateNamesMeta();
+  render();
 }
 
-// Close the winner modal
 function closeModal() {
   winnerModal.classList.add('hidden');
   lastWinnerIndex = -1;
   lastWinnerIndices = [];
+  spinList = null;
+  if (lastFocusedBeforeModal && typeof lastFocusedBeforeModal.focus === 'function') {
+    lastFocusedBeforeModal.focus();
+  }
+  lastFocusedBeforeModal = null;
 }
 
-// Save input list to local storage
+function isModalOpen() {
+  return !winnerModal.classList.contains('hidden');
+}
+
+/* ---------------- Sidebar ---------------- */
+function setSidebarCollapsed(collapsed) {
+  sidebarPanel.classList.toggle('collapsed', collapsed);
+  btnSidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+  // Wait out the slide transition before re-measuring the canvas.
+  setTimeout(render, 320);
+}
+
+function expandSidebar() {
+  if (sidebarPanel.classList.contains('collapsed')) setSidebarCollapsed(false);
+}
+
+/* ---------------- Turbo stepper ---------------- */
+function updateStepperState() {
+  const max = Math.max(1, getNamesList().length);
+  if (turboCount > max) turboCount = max;
+  if (turboCount < 1) turboCount = 1;
+  stepperValue.textContent = turboCount;
+  if (!isSpinning) {
+    btnStepperMinus.disabled = turboCount <= 1;
+    btnStepperPlus.disabled = turboCount >= max;
+  }
+}
+
+function updateNamesMeta() {
+  const n = getNamesList().length;
+  namesCount.textContent = n === 0 ? 'No names yet' : n + (n === 1 ? ' name' : ' names');
+  updateStepperState();
+}
+
+/* ---------------- Persistence ---------------- */
 function saveNamesToStorage() {
-  localStorage.setItem('wheel_names', namesInput.value);
-  localStorage.setItem('wheel_is_turbo', isTurbo ? '1' : '0');
-  localStorage.setItem('wheel_turbo_count', turboCount);
+  try {
+    localStorage.setItem('wheel_names', namesInput.value);
+    localStorage.setItem('wheel_is_turbo', isTurbo ? '1' : '0');
+    localStorage.setItem('wheel_turbo_count', String(turboCount));
+  } catch (e) {
+    // Private browsing / storage disabled — the app still works for this session.
+  }
 }
 
-// Load input list from local storage or set defaults
 function loadNamesFromStorage() {
-  const stored = localStorage.getItem('wheel_names');
-  if (stored !== null) {
-    namesInput.value = stored;
-  } else {
-    namesInput.value = defaultNames.join('\n');
+  let stored = null;
+  try {
+    stored = localStorage.getItem('wheel_names');
+    isTurbo = localStorage.getItem('wheel_is_turbo') === '1';
+    turboCount = parseInt(localStorage.getItem('wheel_turbo_count') || '3', 10) || 3;
+  } catch (e) {
+    isTurbo = false;
+    turboCount = 3;
   }
 
-  isTurbo = localStorage.getItem('wheel_is_turbo') === '1';
-  turboCount = parseInt(localStorage.getItem('wheel_turbo_count') || '3', 10);
+  namesInput.value = stored !== null ? stored : defaultNames.join('\n');
 
-  // Sync controls UI
-  if (turboToggle) {
-    turboToggle.checked = isTurbo;
-  }
-  if (turboStepperContainer) {
-    if (isTurbo) {
-      turboStepperContainer.classList.remove('hidden');
-    } else {
-      turboStepperContainer.classList.add('hidden');
-    }
-  }
-  if (stepperValue) {
-    stepperValue.textContent = turboCount;
-  }
-
-  drawWheel();
+  turboToggle.checked = isTurbo;
+  turboStepperContainer.classList.toggle('hidden', !isTurbo);
+  updateNamesMeta();
 }
 
-// Initialize Event Listeners
+/* ---------------- Init ---------------- */
 function init() {
   loadNamesFromStorage();
+  render();
 
-  // Listeners for inputs
+  // The slice labels are drawn in Outfit; if it arrives after first paint the
+  // canvas keeps the fallback metrics until something forces a redraw.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(render).catch(() => {});
+  }
+
   namesInput.addEventListener('input', () => {
     saveNamesToStorage();
+    updateNamesMeta();
     drawWheel();
   });
 
-  // Action buttons
   btnShuffle.addEventListener('click', () => {
     const list = getNamesList();
     if (list.length === 0) return;
-    
-    // Fisher-Yates Shuffle
     for (let i = list.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [list[i], list[j]] = [list[j], list[i]];
     }
-    
     namesInput.value = list.join('\n');
     saveNamesToStorage();
+    updateNamesMeta();
     drawWheel();
   });
 
   btnClear.addEventListener('click', () => {
     namesInput.value = '';
+    poppedOutSlices = [];
     saveNamesToStorage();
+    updateNamesMeta();
     drawWheel();
   });
 
   btnSample.addEventListener('click', () => {
     namesInput.value = defaultNames.join('\n');
+    poppedOutSlices = [];
     saveNamesToStorage();
+    updateNamesMeta();
     drawWheel();
   });
 
-  // Turbo Play control listeners
-  if (turboToggle) {
-    turboToggle.addEventListener('change', () => {
-      isTurbo = turboToggle.checked;
-      if (isTurbo) {
-        turboStepperContainer.classList.remove('hidden');
-      } else {
-        turboStepperContainer.classList.add('hidden');
-      }
-      saveNamesToStorage();
-    });
-  }
+  turboToggle.addEventListener('change', () => {
+    isTurbo = turboToggle.checked;
+    turboStepperContainer.classList.toggle('hidden', !isTurbo);
+    updateStepperState();
+    saveNamesToStorage();
+  });
 
-  if (btnStepperMinus) {
-    btnStepperMinus.addEventListener('click', () => {
-      if (turboCount > 1) {
-        turboCount--;
-        stepperValue.textContent = turboCount;
-        saveNamesToStorage();
-      }
-    });
-  }
+  btnStepperMinus.addEventListener('click', () => {
+    turboCount--;
+    updateStepperState();
+    saveNamesToStorage();
+  });
 
-  if (btnStepperPlus) {
-    btnStepperPlus.addEventListener('click', () => {
-      const maxCount = Math.max(1, getNamesList().length);
-      if (turboCount < maxCount) {
-        turboCount++;
-        stepperValue.textContent = turboCount;
-        saveNamesToStorage();
-      }
-    });
-  }
+  btnStepperPlus.addEventListener('click', () => {
+    turboCount++;
+    updateStepperState();
+    saveNamesToStorage();
+  });
 
-  // Spin control
   spinButton.addEventListener('click', () => {
-    // Initialize or resume audio context synchronously within user gesture callback
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
+    // Must happen inside the user gesture or iOS keeps the context suspended.
+    ensureAudioContext();
     spinWheel();
   });
 
-  // Modal actions
   btnRemoveWinner.addEventListener('click', removeWinner);
   btnKeepWinner.addEventListener('click', closeModal);
 
-  // Sidebar toggle collapse
+  // A modal you can only leave via two specific buttons is a trap on a phone
+  // where those buttons can end up below the fold.
+  winnerModal.addEventListener('click', (event) => {
+    if (event.target === winnerModal) closeModal();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isModalOpen()) closeModal();
+  });
+
   btnSidebarToggle.addEventListener('click', () => {
-    const isCollapsed = sidebarPanel.classList.toggle('collapsed');
-    appContainer.classList.toggle('sidebar-collapsed');
-    btnSidebarToggle.textContent = isCollapsed ? '▶' : '◀';
-    
-    // Redraw wheel to fit new available screen layout
-    setTimeout(drawWheel, 310);
+    setSidebarCollapsed(!sidebarPanel.classList.contains('collapsed'));
   });
 
-  // No hide names checkbox listener
+  // ResizeObserver catches viewport changes, orientation flips, sidebar
+  // collapses and the mobile URL bar sliding away — a resize listener misses
+  // the last two.
+  if (typeof ResizeObserver === 'function') {
+    let frame = null;
+    const observer = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(render);
+    });
+    observer.observe(canvas.parentElement || canvas);
+  } else {
+    window.addEventListener('resize', render);
+  }
 
-  // Redraw canvas on window resize to ensure correct bounds scaling
-  window.addEventListener('resize', () => {
-    // Drawing handles pixel layouts correctly
-    drawWheel();
-  });
+  window.addEventListener('orientationchange', () => setTimeout(render, 250));
+
+  // getPalette() already notices a scheme flip on its next call; this just
+  // repaints an idle wheel immediately instead of at the next draw.
+  if (typeof window.matchMedia === 'function') {
+    const scheme = window.matchMedia('(prefers-color-scheme: dark)');
+    const onSchemeChange = () => render();
+    if (scheme.addEventListener) scheme.addEventListener('change', onSchemeChange);
+    else if (scheme.addListener) scheme.addListener(onSchemeChange);
+  }
 }
 
-// Initialize on page load
-window.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
