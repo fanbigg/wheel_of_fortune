@@ -2,113 +2,285 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wheel of Fortune - Unit Tests</title>
+  <!-- Loaded so the canvas theme bridge has real custom properties to read. -->
+  <link rel="stylesheet" href="styles.css">
   <style>
     body {
-      font-family: monospace;
-      background: #110e28;
-      color: #f3f0ff;
-      padding: 40px;
+      font-family: var(--font-mono);
+      background-color: var(--content-bg);
+      color: var(--text-main);
+      padding: 24px;
+      display: block;
+      align-items: stretch;
+      min-height: auto;
     }
-    h1 { color: #b185ff; }
-    .pass { color: #00f2fe; }
-    .fail { color: #ff4a83; font-weight: bold; }
+    h1 { font-family: var(--font-stack); font-size: 1.3rem; margin-bottom: 4px; }
+    .summary { margin: 12px 0 20px; font-size: 0.95rem; font-weight: 700; }
+    .summary.ok { color: var(--success); }
+    .summary.bad { color: var(--danger); }
+    .pass { color: var(--success); }
+    .fail { color: var(--danger); font-weight: bold; }
     .test-case {
-      margin-bottom: 12px;
-      padding: 10px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 4px;
+      margin-bottom: 8px;
+      padding: 10px 12px;
+      background-color: var(--window-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
     }
+    .detail { color: var(--text-muted); display: block; margin-top: 2px; }
   </style>
 </head>
 <body>
   <h1>Wheel of Fortune Self-Tests</h1>
-  <div id="results">Running tests...</div>
+  <div class="summary" id="summary">Running…</div>
+  <div id="results"></div>
 
   <script>
-    // Mock elements to run the test environment safely without crashing on DOM references
+    /* A stand-in DOM good enough for script.js to initialise against, so the
+       suite fails loudly on a load-time error instead of quietly logging one. */
+    const noop = () => {};
+
+    function fakeClassList() {
+      const set = new Set();
+      return {
+        add: c => set.add(c),
+        remove: c => set.delete(c),
+        contains: c => set.has(c),
+        toggle: (c, force) => {
+          const on = force === undefined ? !set.has(c) : Boolean(force);
+          on ? set.add(c) : set.delete(c);
+          return on;
+        }
+      };
+    }
+
+    function fakeEl(extra) {
+      return Object.assign({
+        value: '',
+        checked: false,
+        disabled: false,
+        textContent: '',
+        classList: fakeClassList(),
+        style: {},
+        addEventListener: noop,
+        removeEventListener: noop,
+        setAttribute: noop,
+        getAttribute: () => null,
+        focus: noop,
+        replaceChildren: noop,
+        appendChild: noop
+      }, extra || {});
+    }
+
+    /* A canvas 2D context that records nothing but answers every call
+       drawWheel() makes. */
+    function fakeCtx() {
+      const grad = { addColorStop: noop };
+      return {
+        clearRect: noop, beginPath: noop, arc: noop, moveTo: noop, closePath: noop,
+        fill: noop, stroke: noop, save: noop, restore: noop, translate: noop,
+        rotate: noop, fillText: noop,
+        createRadialGradient: () => grad,
+        measureText: t => ({ width: String(t).length * 8 }),
+        set fillStyle(v) { this._fill = v; }, get fillStyle() { return this._fill; },
+        set strokeStyle(v) { this._stroke = v; }, get strokeStyle() { return this._stroke; },
+        lineWidth: 1, font: '', textAlign: '', textBaseline: '',
+        shadowColor: '', shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0
+      };
+    }
+
+    // A real element so ResizeObserver has something legal to observe.
+    const canvasHost = document.createElement('div');
+    canvasHost.style.cssText = 'width:400px;height:400px;position:absolute;left:-9999px;';
+    document.body.appendChild(canvasHost);
+
+    const sharedCtx = fakeCtx();
     const mockElements = {
-      'names-input': { value: '' },
-      'btn-shuffle': { addEventListener: () => {} },
-      'btn-clear': { addEventListener: () => {} },
-      'btn-sample': { addEventListener: () => {} },
-      'spin-button': { addEventListener: () => {} },
-      'wheel-canvas': { getContext: () => ({
-        clearRect: () => {},
-        beginPath: () => {},
-        arc: () => {},
-        fill: () => {},
-        stroke: () => {},
-        save: () => {},
-        translate: () => {},
-        rotate: () => {},
-        restore: () => {},
-        fillText: () => {},
-        measureText: () => ({ width: 10 })
-      }), width: 600, height: 600 },
-      'winner-modal': { classList: { add: () => {}, remove: () => {} } },
-      'winner-name': {},
-      'btn-remove-winner': { addEventListener: () => {} },
-      'btn-keep-winner': { addEventListener: () => {} },
-      'confetti-container': {},
-      'btn-sidebar-toggle': { addEventListener: () => {}, textContent: '◀' },
-      'sidebar-panel': { classList: { toggle: () => {} } },
-      'turbo-toggle': { checked: false, addEventListener: () => {} },
-      'turbo-stepper-container': { classList: { remove: () => {}, add: () => {} } },
-      'btn-stepper-minus': { addEventListener: () => {} },
-      'btn-stepper-plus': { addEventListener: () => {} },
-      'stepper-value': { textContent: '' }
+      'names-input': fakeEl(),
+      'names-count': fakeEl(),
+      'btn-shuffle': fakeEl(),
+      'btn-clear': fakeEl(),
+      'btn-sample': fakeEl(),
+      'spin-button': fakeEl(),
+      'wheel-canvas': fakeEl({
+        width: 800,
+        height: 800,
+        parentElement: canvasHost,
+        getContext: () => sharedCtx,
+        getBoundingClientRect: () => ({ width: 400, height: 400 })
+      }),
+      'winner-modal': fakeEl(),
+      'winner-name': fakeEl(),
+      'btn-remove-winner': fakeEl(),
+      'btn-keep-winner': fakeEl(),
+      'confetti-container': fakeEl(),
+      'btn-sidebar-toggle': fakeEl(),
+      'sidebar-panel': fakeEl(),
+      'turbo-toggle': fakeEl(),
+      'turbo-stepper-container': fakeEl(),
+      'btn-stepper-minus': fakeEl(),
+      'btn-stepper-plus': fakeEl(),
+      'stepper-value': fakeEl()
     };
 
-    // Override document.getElementById
-    const originalGetElement = document.getElementById;
-    document.getElementById = function(id) {
-      if (mockElements[id]) return mockElements[id];
-      return originalGetElement.call(document, id);
-    };
+    const realGetElementById = document.getElementById.bind(document);
+    document.getElementById = id => mockElements[id] || realGetElementById(id);
 
-    // Override document.querySelector
-    document.querySelector = function(selector) {
-      if (selector === '.app-container') {
-        return { classList: { toggle: () => {} } };
+    // script.js reads localStorage on init; keep the real app's saved names
+    // out of the tests and the tests out of the real app's storage.
+    const memoryStore = {};
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: k => (k in memoryStore ? memoryStore[k] : null),
+        setItem: (k, v) => { memoryStore[k] = String(v); },
+        removeItem: k => { delete memoryStore[k]; }
       }
-      return null;
-    };
+    });
 
-    // Output logs
-    const resultsContainer = document.getElementById('results');
-    resultsContainer.innerHTML = '';
+    const resultsContainer = realGetElementById('results');
+    const summaryEl = realGetElementById('summary');
+    let passed = 0, failed = 0;
 
-    function logTest(name, passed, details = '') {
+    function logTest(name, ok, details) {
+      if (ok) passed++; else failed++;
       const div = document.createElement('div');
       div.className = 'test-case';
-      div.innerHTML = `<strong>${name}</strong>: <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span> ${details}`;
+      const label = document.createElement('strong');
+      label.textContent = name + ': ';
+      const verdict = document.createElement('span');
+      verdict.className = ok ? 'pass' : 'fail';
+      verdict.textContent = ok ? 'PASS' : 'FAIL';
+      div.append(label, verdict);
+      if (details) {
+        const d = document.createElement('span');
+        d.className = 'detail';
+        d.textContent = details;
+        div.appendChild(d);
+      }
       resultsContainer.appendChild(div);
+    }
+
+    function expect(name, got, want) {
+      logTest(name, Object.is(got, want), `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
     }
   </script>
 
-  <!-- Load the script to test -->
+  <!-- Load the script under test -->
   <script src="script.js"></script>
 
   <script>
-    // Test suite execution
     try {
-      // 1. Test cleanName returns name as-is
-      const test1 = cleanName("Apple") === "Apple";
-      logTest("cleanName returns name as-is", test1, `Apple -> ${cleanName("Apple")}`);
+      /* --- names parsing --- */
+      expect('cleanName returns the name unchanged', cleanName('Apple'), 'Apple');
 
-      // 2. Test getNamesList
-      namesInput.value = "Apple\nBanana\nCherry\nDate";
+      namesInput.value = 'Apple\nBanana\nCherry\nDate';
       const list = getNamesList();
-      const test2 = list.length === 4 && list[2] === "Cherry";
-      logTest("getNamesList parses lines correctly", test2, `Parsed list length: ${list.length}, item[2]: ${list[2]}`);
+      expect('getNamesList counts lines', list.length, 4);
+      expect('getNamesList keeps order', list[2], 'Cherry');
+
+      namesInput.value = '  Apple  \n\n   \nBanana\n';
+      const trimmed = getNamesList();
+      expect('getNamesList drops blank lines', trimmed.length, 2);
+      expect('getNamesList trims whitespace', trimmed[0], 'Apple');
+
+      /* --- canvas theme bridge ---
+         Regression guard: fillStyle/strokeStyle cannot take "var(--x)", so
+         these must come back as concrete colors from the stylesheet. The
+         palette is light/dark aware, so check the shape, not a fixed hex. */
+      const isColor = v => /^(#|rgb|hsl)/.test(v);
+      const rim = themeColor('--wheel-rim', 'FALLBACK');
+      logTest('themeColor resolves --wheel-rim from CSS',
+        rim !== 'FALLBACK' && isColor(rim), `resolved to "${rim}"`);
+      const muted = themeColor('--text-muted', 'FALLBACK');
+      logTest('themeColor resolves --text-muted from CSS',
+        muted !== 'FALLBACK' && isColor(muted), `resolved to "${muted}"`);
+      logTest('themeColor never returns a var() expression',
+        !rim.includes('var(') && !muted.includes('var('), `${rim} / ${muted}`);
+      logTest('themeColor falls back for an undefined property',
+        themeColor('--not-a-real-token', 'FALLBACK') === 'FALLBACK');
+
+      /* The palette is cached per scheme, never indefinitely — a cache that
+         outlived a light/dark switch would leave the wheel in the old theme. */
+      const pal = getPalette();
+      logTest('getPalette returns a full set of concrete colors',
+        Object.keys(pal).length === 8 && Object.values(pal).every(v => isColor(v)),
+        Object.entries(pal).map(([k, v]) => `${k}=${v}`).join(', '));
+      logTest('getPalette is cached within one scheme', getPalette() === pal);
+      logTest('getPalette rebuilds when the scheme changes',
+        (() => { paletteScheme = paletteScheme === 'dark' ? 'light' : 'dark';
+                 return getPalette() !== pal; })());
+
+      /* --- drawWheel survives both branches --- */
+      let drewEmpty = true;
+      namesInput.value = '';
+      try { drawWheel(); } catch (e) { drewEmpty = false; logTest('drawWheel empty threw', false, e.message); }
+      logTest('drawWheel renders the empty placeholder', drewEmpty);
+
+      let drewFull = true;
+      namesInput.value = defaultNames.join('\n');
+      try { drawWheel(); } catch (e) { drewFull = false; logTest('drawWheel full threw', false, e.message); }
+      logTest('drawWheel renders a populated wheel', drewFull);
+
+      let drewLong = true;
+      namesInput.value = 'A name far too long to fit inside one slice of the wheel\nB\nC';
+      try { drawWheel(); } catch (e) { drewLong = false; }
+      logTest('drawWheel truncates over-long labels without throwing', drewLong);
+
+      /* --- easing --- */
+      expect('easeOutCubic(0) is 0', easeOutCubic(0), 0);
+      expect('easeOutCubic(1) is 1', easeOutCubic(1), 1);
+      logTest('easeOutCubic decelerates', easeOutCubic(0.5) > 0.5, `f(0.5) = ${easeOutCubic(0.5)}`);
+
+      /* --- slice colors --- */
+      expect('getSliceColor spaces hues evenly', getSliceColor(1, 4), 'hsl(90, 70%, 50%)');
+
+      /* --- turbo stepper clamping ---
+         The picker must never offer more winners than there are names. */
+      namesInput.value = 'A\nB\nC';
+      turboCount = 99;
+      updateStepperState();
+      expect('turboCount clamps to the number of names', turboCount, 3);
+      logTest('plus button disables at the ceiling', btnStepperPlus.disabled === true);
+
+      namesInput.value = 'A\nB\nC\nD\nE';
+      turboCount = 0;
+      updateStepperState();
+      expect('turboCount floors at 1', turboCount, 1);
+      logTest('minus button disables at the floor', btnStepperMinus.disabled === true);
+
+      /* --- pointer geometry ---
+         The pointer sits at 12 o'clock, canvas angle 1.5π. With no rotation and
+         4 slices, slice 3 spans 1.5π–2π, so it is the one under the pointer. */
+      function sliceUnderPointer(rotation, total) {
+        const arc = (2 * Math.PI) / total;
+        let a = (1.5 * Math.PI - rotation) % (2 * Math.PI);
+        if (a < 0) a += 2 * Math.PI;
+        return Math.floor(a / arc);
+      }
+      expect('slice under pointer at rest (4 slices)', sliceUnderPointer(0, 4), 3);
+      expect('rotating one slice advances the pointer', sliceUnderPointer(Math.PI / 2, 4), 2);
+      expect('a full turn returns to the start', sliceUnderPointer(2 * Math.PI, 4), 3);
+
+      /* --- storage is sandboxed --- */
+      saveNamesToStorage();
+      logTest('saveNamesToStorage writes without throwing', true);
 
     } catch (e) {
       const errorDiv = document.createElement('div');
-      errorDiv.className = 'fail';
-      errorDiv.innerText = `Runtime Error: ${e.message}\n${e.stack}`;
+      errorDiv.className = 'test-case fail';
+      errorDiv.textContent = `Runtime Error: ${e.message}\n${e.stack}`;
       resultsContainer.appendChild(errorDiv);
+      failed++;
     }
+
+    summaryEl.textContent = `${passed} passed, ${failed} failed`;
+    summaryEl.className = 'summary ' + (failed ? 'bad' : 'ok');
   </script>
 </body>
 </html>
